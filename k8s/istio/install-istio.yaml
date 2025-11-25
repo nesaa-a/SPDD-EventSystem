@@ -1,0 +1,31 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  namespace: istio-system
+  name: istio-control-plane
+spec:
+  profile: demo
+  components:
+    egressGateways:
+    - name: istio-egressgateway
+      enabled: true
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: true
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 10m
+            memory: 100Mi
+  values:
+    global:
+      proxy:
+        autoInject: disabled
+      useMCP: false
+    telemetry:
+      v2:
+        prometheus:
+          enabled: true
+        stackdriver:
+          enabled: false

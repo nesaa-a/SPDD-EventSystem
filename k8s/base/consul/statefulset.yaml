@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul
+  namespace: spdd-events
+  labels:
+    app: consul
+spec:
+  ports:
+  - port: 8500
+    name: http
+    targetPort: 8500
+  - port: 8502
+    name: grpc
+    targetPort: 8502
+  - port: 8300
+    name: server-rpc
+    targetPort: 8300
+  - port: 8301
+    name: serf-lan
+    protocol: UDP
+    targetPort: 8301
+  - port: 8302
+    name: serf-wan
+    protocol: UDP
+    targetPort: 8302
+  - port: 8600
+    name: dns-tcp
+    protocol: TCP
+    targetPort: 8600
+  - port: 8600
+    name: dns-udp
+    protocol: UDP
+    targetPort: 8600
+  selector:
+    app: consul
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: consul
+  namespace: spdd-events
+  labels:
+    app: consul
+spec:
+  serviceName: consul
+  replicas: 3
+  selector:
+    matchLabels:
+      app: consul
+  template:
+    metadata:
+      labels:
+        app: consul
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: consul
+        image: hashicorp/consul:1.14.0
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: GOMAXPROCS
+          value: "2"
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        command:
+        - "/bin/sh"
+        - "-ec"
+        - |
+          #!/bin/sh
+          /bin/consul agent \
+            -advertise=${POD_IP} \
+            -bind=0.0.0.0 \
+            -bootstrap-expect=3 \
+            -retry-join=consul-0.consul.spdd-events.svc.cluster.local \
+            -retry-join=consul-1.consul.spdd-events.svc.cluster.local \
+            -retry-join=consul-2.consul.spdd-events.svc.cluster.local \
+            -client=0.0.0.0 \
+            -config-file=/consul/config/config.json \
+            -data-dir=/consul/data \
+            -datacenter=dc1 \
+            -domain=cluster.local \
+            -encrypt=u9WxH6YFp0lI9nZvL6JkQw== \
+            -server \
+            -ui \
+            -disable-host-node-id=true
+        ports:
+        - name: http
+          containerPort: 8500
+        - name: grpc
+          containerPort: 8502
+        - name: server-rpc
+          containerPort: 8300
+        - name: serf-lan
+          containerPort: 8301
+          protocol: UDP
+        - name: serf-wan
+          containerPort: 8302
+          protocol: UDP
+        - name: dns-tcp
+          containerPort: 8600
+          protocol: TCP
+        - name: dns-udp
+          containerPort: 8600
+          protocol: UDP
+        volumeMounts:
+        - name: config
+          mountPath: /consul/config
+        - name: data
+          mountPath: /consul/data
+        livenessProbe:
+          httpGet:
+            path: /v1/status/leader
+            port: 8500
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /v1/status/leader
+            port: 8500
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: consul-config
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi

@@ -1,0 +1,13 @@
+resources:
+  - namespace.yaml
+  - configs/config.yaml
+  - event-service/
+  - analytics-service/
+  - kafka/
+  - monitoring/
+
+commonLabels:
+  app: spdd-eventsystem
+  environment: production
+
+nameSuffix: -prod

@@ -1,0 +1,43 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: spdd-gateway
+  namespace: spdd-events
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: spdd-vs
+  namespace: spdd-events
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - spdd-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /api/events
+    route:
+    - destination:
+        host: event-service.spdd-events.svc.cluster.local
+        port:
+          number: 8000
+  - match:
+    - uri:
+        prefix: /api/analytics
+    route:
+    - destination:
+        host: analytics-service.spdd-events.svc.cluster.local
+        port:
+          number: 8000
