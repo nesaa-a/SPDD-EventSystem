@@ -11,5 +11,5 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 def init_db():
-    from .models import Event
+    from .models import Event, Participant
     Base.metadata.create_all(bind=engine)

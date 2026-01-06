@@ -2,36 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Event System UI</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Management System</title>
 </head>
 <body>
-
-    <h1>Event Management System</h1>
-
-    <div class="form-container">
-        <h2>Create Event</h2>
-
-        <input type="text" id="title" placeholder="Title">
-        <input type="text" id="author" placeholder="Author">
-        <input type="text" id="location" placeholder="Location">
-        <input type="date" id="event_date">
-        <textarea id="description" placeholder="Description"></textarea>
-
-        <button onclick="createEvent()">Submit Event</button>
-
-        <p id="response"></p>
-    </div>
-
-    <hr>
-
-    <div class="stats-container">
-        <h2>Analytics</h2>
-        <button onclick="loadStats()">Load Stats</button>
-
-        <pre id="statsBox"></pre>
-    </div>
-
-    <script src="script.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
 </body>
 </html>
+
