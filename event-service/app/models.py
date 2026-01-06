@@ -9,7 +9,6 @@ class Event(Base):
     location = Column(String(200))
     date = Column(String(100))
     seats = Column(Integer)
-    organizer = Column(String(200))  # Speaker/Organizer name
 
 class Participant(Base):
     __tablename__ = "participants"

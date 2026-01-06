@@ -28,7 +28,6 @@ class EventIn(BaseModel):
     location: str
     date: str
     seats: int
-    organizer: str = None
 
 class EventOut(BaseModel):
     id: int
@@ -37,7 +36,6 @@ class EventOut(BaseModel):
     location: str
     date: str
     seats: int
-    organizer: Optional[str]
 
     class Config:
         from_attributes = True
@@ -86,7 +84,7 @@ def create_event(ev: EventIn):
     db = SessionLocal()
     try:
         # create event in Postgres
-        event = Event(title=ev.title, description=ev.description, location=ev.location, date=ev.date, seats=ev.seats, organizer=ev.organizer)
+        event = Event(title=ev.title, description=ev.description, location=ev.location, date=ev.date, seats=ev.seats)
         db.add(event)
         db.commit()
         db.refresh(event)
