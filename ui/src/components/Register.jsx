@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authAPI, decodeJWT } from '../services/api';
 
 const Register = ({ onRegister }) => {
   const [formData, setFormData] = useState({
-    name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -28,7 +29,7 @@ const Register = ({ onRegister }) => {
 
     try {
       // Validation
-      if (!formData.name || !formData.email || !formData.password) {
+      if (!formData.username || !formData.email || !formData.password) {
         throw new Error('Please fill in all fields');
       }
 
@@ -40,32 +41,43 @@ const Register = ({ onRegister }) => {
         throw new Error('Password must be at least 6 characters');
       }
 
-      // Check if user already exists
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const existingUser = users.find(u => u.email === formData.email);
-
-      if (existingUser) {
-        throw new Error('Email already registered');
-      }
-
-      // Create new user (default role is 'user')
-      const newUser = {
-        id: Date.now(),
-        name: formData.name,
+      const userData = {
+        username: formData.username,
         email: formData.email,
-        password: formData.password, // In production, this should be hashed
-        role: 'user' // Default role
+        password: formData.password
       };
 
-      users.push(newUser);
-      localStorage.setItem('users', JSON.stringify(users));
-      localStorage.setItem('currentUser', JSON.stringify(newUser));
-
+      // Register the user
+      await authAPI.register(userData);
+      
+      // After successful registration, automatically log in
+      const loginResponse = await authAPI.login({
+        username: formData.username,
+        password: formData.password
+      });
+      
+      // Store token and user info
+      localStorage.setItem('token', loginResponse.access_token);
+      
+      // Decode token to get user info
+      const decodedToken = decodeJWT(loginResponse.access_token);
+      const user = { 
+        username: decodedToken.sub, 
+        role: decodedToken.role || 'user',
+        email: decodedToken.email || ''
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+      
       if (onRegister) {
-        onRegister(newUser);
+        onRegister(user);
       }
-
-      navigate('/dashboard');
+      
+      // Redirect based on role
+      if (user.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -73,30 +85,67 @@ const Register = ({ onRegister }) => {
     }
   };
 
+  const containerStyle = {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    padding: '20px'
+  };
+
+  const cardStyle = {
+    backgroundColor: 'white',
+    borderRadius: '16px',
+    boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
+    padding: '48px',
+    width: '100%',
+    maxWidth: '420px'
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '14px 18px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '10px',
+    fontSize: '16px',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.2s'
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '8px'
+  };
+
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h1>Create Account</h1>
-          <p>Sign up to start managing events</p>
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <div style={{textAlign: 'center', marginBottom: '32px'}}>
+          <h1 style={{fontSize: '2rem', fontWeight: '700', color: '#111827', marginBottom: '8px'}}>Create Account</h1>
+          <p style={{color: '#6b7280', fontSize: '16px'}}>Sign up to start managing events</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="form-group">
-            <label htmlFor="name">Full Name</label>
+        <form onSubmit={handleSubmit} style={{display: 'flex', flexDirection: 'column', gap: '18px'}}>
+          <div>
+            <label htmlFor="username" style={labelStyle}>Username</label>
             <input
               type="text"
-              id="name"
-              name="name"
-              value={formData.name}
+              id="username"
+              name="username"
+              value={formData.username}
               onChange={handleChange}
               required
-              placeholder="John Doe"
+              placeholder="johndoe"
+              style={inputStyle}
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
+          <div>
+            <label htmlFor="email" style={labelStyle}>Email</label>
             <input
               type="email"
               id="email"
@@ -105,11 +154,12 @@ const Register = ({ onRegister }) => {
               onChange={handleChange}
               required
               placeholder="your.email@example.com"
+              style={inputStyle}
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
+          <div>
+            <label htmlFor="password" style={labelStyle}>Password</label>
             <input
               type="password"
               id="password"
@@ -119,11 +169,12 @@ const Register = ({ onRegister }) => {
               required
               placeholder="At least 6 characters"
               minLength={6}
+              style={inputStyle}
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="confirmPassword">Confirm Password</label>
+          <div>
+            <label htmlFor="confirmPassword" style={labelStyle}>Confirm Password</label>
             <input
               type="password"
               id="confirmPassword"
@@ -132,18 +183,48 @@ const Register = ({ onRegister }) => {
               onChange={handleChange}
               required
               placeholder="Confirm your password"
+              style={inputStyle}
             />
           </div>
 
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <div style={{padding: '12px 16px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '14px'}}>
+              {error}
+            </div>
+          )}
 
-          <button type="submit" disabled={loading} className="btn btn-primary btn-large btn-block">
+          <button 
+            type="submit" 
+            disabled={loading} 
+            style={{
+              width: '100%',
+              padding: '16px',
+              backgroundColor: '#4f46e5',
+              color: 'white',
+              borderRadius: '10px',
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              opacity: loading ? 0.7 : 1,
+              marginTop: '8px'
+            }}
+          >
             {loading ? 'Creating account...' : 'Sign Up'}
           </button>
         </form>
 
-        <div className="auth-footer">
-          <p>Already have an account? <a href="#" onClick={(e) => { e.preventDefault(); navigate('/login'); }}>Sign in</a></p>
+        <div style={{textAlign: 'center', marginTop: '24px'}}>
+          <p style={{color: '#6b7280', fontSize: '14px'}}>
+            Already have an account?{' '}
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); navigate('/login'); }}
+              style={{color: '#4f46e5', fontWeight: '600', textDecoration: 'none'}}
+            >
+              Sign in
+            </a>
+          </p>
         </div>
       </div>
     </div>

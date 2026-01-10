@@ -2,15 +2,18 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EventForm from './EventForm';
 import EventList from './EventList';
+import EventSearch from './EventSearch';
 
 const Dashboard = ({ user, onLogout }) => {
   const [showEventForm, setShowEventForm] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [searchResults, setSearchResults] = useState(null);
   const navigate = useNavigate();
 
   const handleEventCreated = () => {
     setRefreshTrigger(prev => prev + 1);
     setShowEventForm(false);
+    setSearchResults(null); // Clear search to show all events
   };
 
   const handleLogout = () => {
@@ -21,63 +24,50 @@ const Dashboard = ({ user, onLogout }) => {
     navigate('/login');
   };
 
+  const handleSearchResults = (results) => {
+    setSearchResults(results);
+  };
+
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="header-content">
-          <div>
-            <h1>📅 Event Management System</h1>
-            <p>Welcome back, {user?.name || 'User'}! {isAdmin && <span className="role-badge">Admin</span>}</p>
-          </div>
-          <div className="header-actions">
-            {isAdmin && (
-              <button onClick={() => navigate('/admin')} className="btn btn-secondary">
-                Admin Dashboard
-              </button>
-            )}
-            <button onClick={handleLogout} className="btn btn-secondary">
-              Logout
-            </button>
-          </div>
+    <div className="space-y-6">
+      {/* Search Section */}
+      <EventSearch onSearchResults={handleSearchResults} />
+
+      {isAdmin && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowEventForm(!showEventForm)}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            {showEventForm ? '✖ Hide Form' : '+ Create New Event'}
+          </button>
         </div>
-      </header>
+      )}
 
-      <main className="app-main">
-        {isAdmin && (
-          <div className="main-actions">
-            <button
-              onClick={() => setShowEventForm(!showEventForm)}
-              className="btn btn-primary btn-large"
-            >
-              {showEventForm ? 'Hide Form' : '+ Create New Event'}
-            </button>
-          </div>
-        )}
+      {!isAdmin && (
+        <div style={{background: 'linear-gradient(to right, #2563eb, #7c3aed)', borderRadius: '12px', padding: '24px', color: 'white', marginBottom: '24px'}}>
+          <h2 style={{fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '8px'}}>🎉 Discover Amazing Events</h2>
+          <p style={{opacity: 0.9}}>Browse and register for events that interest you. Your registered events will appear in "My Events".</p>
+        </div>
+      )}
 
-        {!isAdmin && (
-          <div className="user-welcome">
-            <h2>Browse Available Events</h2>
-            <p>Select an event below to register as a participant</p>
-          </div>
-        )}
+      {isAdmin && showEventForm && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Create New Event</h2>
+          <EventForm
+            onEventCreated={handleEventCreated}
+            onCancel={() => setShowEventForm(false)}
+          />
+        </div>
+      )}
 
-        {isAdmin && showEventForm && (
-          <div className="event-form-section">
-            <EventForm
-              onEventCreated={handleEventCreated}
-              onCancel={() => setShowEventForm(false)}
-            />
-          </div>
-        )}
-
-        <EventList refreshTrigger={refreshTrigger} userRole={user?.role} currentUserEmail={user?.email} />
-      </main>
-
-      <footer className="app-footer">
-        <p>© 2024 Event Management System</p>
-      </footer>
+      <EventList 
+        refreshTrigger={refreshTrigger} 
+        userRole={user?.role}
+        searchResults={searchResults}
+      />
     </div>
   );
 };

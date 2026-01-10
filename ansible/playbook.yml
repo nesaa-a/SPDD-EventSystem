@@ -1,0 +1,273 @@
+---
+# Ansible Playbook for SPDD Event System Infrastructure Setup
+# Automates deployment and configuration of all services
+
+- name: Setup SPDD Event System Infrastructure
+  hosts: all
+  become: yes
+  vars:
+    app_name: spdd-eventsystem
+    app_user: spdd
+    app_dir: /opt/spdd
+    docker_compose_version: "2.23.0"
+    
+  tasks:
+    # System Setup
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+      when: ansible_os_family == "Debian"
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
+          - python3-venv
+          - git
+          - jq
+          - unzip
+        state: present
+      when: ansible_os_family == "Debian"
+
+    # Docker Installation
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # Application User Setup
+    - name: Create application user
+      user:
+        name: "{{ app_user }}"
+        groups: docker
+        append: yes
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+
+    # Clone Repository
+    - name: Clone SPDD repository
+      git:
+        repo: "https://github.com/your-org/spdd-eventsystem.git"
+        dest: "{{ app_dir }}"
+        version: main
+        force: yes
+      become_user: "{{ app_user }}"
+
+    # Environment Configuration
+    - name: Create .env file
+      template:
+        src: templates/env.j2
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0600"
+
+    # SSL Certificates (if needed)
+    - name: Create SSL directory
+      file:
+        path: "{{ app_dir }}/ssl"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0700"
+
+    # Start Services
+    - name: Pull Docker images
+      community.docker.docker_compose:
+        project_src: "{{ app_dir }}/infra"
+        pull: yes
+      become_user: "{{ app_user }}"
+
+    - name: Start infrastructure services
+      community.docker.docker_compose:
+        project_src: "{{ app_dir }}/infra"
+        state: present
+      become_user: "{{ app_user }}"
+
+    - name: Wait for PostgreSQL to be ready
+      wait_for:
+        host: localhost
+        port: 5432
+        timeout: 60
+
+    - name: Wait for Kafka to be ready
+      wait_for:
+        host: localhost
+        port: 9092
+        timeout: 120
+
+    # Health Checks
+    - name: Check event-service health
+      uri:
+        url: "http://localhost:8000/health"
+        method: GET
+        status_code: 200
+      register: health_check
+      retries: 10
+      delay: 5
+      until: health_check.status == 200
+
+    # Monitoring Setup
+    - name: Start monitoring stack
+      community.docker.docker_compose:
+        project_src: "{{ app_dir }}/monitoring"
+        files:
+          - docker-compose.monitoring.yml
+        state: present
+      become_user: "{{ app_user }}"
+
+    # Firewall Configuration
+    - name: Configure UFW firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"    # SSH
+        - "80"    # HTTP
+        - "443"   # HTTPS
+        - "8000"  # Event Service
+        - "3000"  # Frontend/Grafana
+        - "9090"  # Prometheus
+      when: ansible_os_family == "Debian"
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+      when: ansible_os_family == "Debian"
+
+    # Log Rotation
+    - name: Configure logrotate for Docker
+      copy:
+        dest: /etc/logrotate.d/docker-containers
+        content: |
+          /var/lib/docker/containers/*/*.log {
+            rotate 7
+            daily
+            compress
+            size=10M
+            missingok
+            delaycompress
+            copytruncate
+          }
+        mode: "0644"
+
+    # Cleanup
+    - name: Prune unused Docker resources
+      community.docker.docker_prune:
+        containers: yes
+        images: yes
+        networks: yes
+        volumes: no
+        builder_cache: yes
+
+  handlers:
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+---
+# Production-specific playbook
+- name: Production Environment Setup
+  hosts: production
+  become: yes
+  vars:
+    environment: production
+    replicas: 3
+    
+  tasks:
+    - name: Configure production environment
+      lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^ENVIRONMENT="
+        line: "ENVIRONMENT=production"
+
+    - name: Enable SSL
+      lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^SSL_ENABLED="
+        line: "SSL_ENABLED=true"
+
+    - name: Set production log level
+      lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^LOG_LEVEL="
+        line: "LOG_LEVEL=INFO"
+
+    - name: Configure backups
+      cron:
+        name: "Database backup"
+        minute: "0"
+        hour: "2"
+        job: "{{ app_dir }}/scripts/backup.sh >> /var/log/spdd-backup.log 2>&1"
+        user: "{{ app_user }}"
+
+---
+# Development-specific playbook
+- name: Development Environment Setup
+  hosts: development
+  become: yes
+  vars:
+    environment: development
+    
+  tasks:
+    - name: Configure development environment
+      lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^ENVIRONMENT="
+        line: "ENVIRONMENT=development"
+
+    - name: Enable debug logging
+      lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^LOG_LEVEL="
+        line: "LOG_LEVEL=DEBUG"
+
+    - name: Install development tools
+      apt:
+        name:
+          - vim
+          - htop
+          - tree
+          - tmux
+        state: present

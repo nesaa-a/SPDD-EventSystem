@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { eventsAPI } from '../services/api';
 
 const EventForm = ({ onEventCreated, onCancel }) => {
@@ -9,10 +9,25 @@ const EventForm = ({ onEventCreated, onCancel }) => {
     date: '',
     seats: '',
     organizer: '',
+    category: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    try {
+      const data = await eventsAPI.getCategories();
+      setCategories(data.categories || []);
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -43,6 +58,7 @@ const EventForm = ({ onEventCreated, onCancel }) => {
         date: '',
         seats: '',
         organizer: '',
+        category: '',
       });
       
       if (onEventCreated) {
@@ -57,50 +73,94 @@ const EventForm = ({ onEventCreated, onCancel }) => {
     }
   };
 
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 16px',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    fontSize: '14px',
+    boxSizing: 'border-box'
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: '6px'
+  };
+
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px',
+    marginBottom: '16px'
+  };
+
   return (
-    <div className="event-form-container">
-      <h2>Create New Event</h2>
-      <form onSubmit={handleSubmit} className="event-form">
-        <div className="form-group">
-          <label htmlFor="title">Title *</label>
-          <input
-            type="text"
-            id="title"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            required
-            placeholder="Enter event title"
-          />
+    <div>
+      <form onSubmit={handleSubmit} style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+        <div style={gridStyle}>
+          <div>
+            <label htmlFor="title" style={labelStyle}>Title *</label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              required
+              placeholder="Enter event title"
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="category" style={labelStyle}>Category</label>
+            <select
+              id="category"
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              style={inputStyle}
+            >
+              <option value="">Select a category</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="description">Description</label>
+        <div>
+          <label htmlFor="description" style={labelStyle}>Description</label>
           <textarea
             id="description"
             name="description"
             value={formData.description}
             onChange={handleChange}
-            rows="4"
+            rows="3"
             placeholder="Event description"
+            style={{...inputStyle, resize: 'none'}}
           />
         </div>
 
-        <div className="form-group">
-          <label htmlFor="organizer">Organizer/Speaker</label>
-          <input
-            type="text"
-            id="organizer"
-            name="organizer"
-            value={formData.organizer}
-            onChange={handleChange}
-            placeholder="Name of organizer or speaker"
-          />
-        </div>
+        <div style={gridStyle}>
+          <div>
+            <label htmlFor="organizer" style={labelStyle}>Organizer/Speaker</label>
+            <input
+              type="text"
+              id="organizer"
+              name="organizer"
+              value={formData.organizer}
+              onChange={handleChange}
+              placeholder="Name of organizer or speaker"
+              style={inputStyle}
+            />
+          </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="location">Location *</label>
+          <div>
+            <label htmlFor="location" style={labelStyle}>Location *</label>
             <input
               type="text"
               id="location"
@@ -109,11 +169,14 @@ const EventForm = ({ onEventCreated, onCancel }) => {
               onChange={handleChange}
               required
               placeholder="Event location"
+              style={inputStyle}
             />
           </div>
+        </div>
 
-          <div className="form-group">
-            <label htmlFor="date">Date & Time *</label>
+        <div style={gridStyle}>
+          <div>
+            <label htmlFor="date" style={labelStyle}>Date & Time *</label>
             <input
               type="datetime-local"
               id="date"
@@ -121,33 +184,70 @@ const EventForm = ({ onEventCreated, onCancel }) => {
               value={formData.date}
               onChange={handleChange}
               required
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="seats" style={labelStyle}>Number of Seats *</label>
+            <input
+              type="number"
+              id="seats"
+              name="seats"
+              value={formData.seats}
+              onChange={handleChange}
+              required
+              min="1"
+              placeholder="Available seats"
+              style={inputStyle}
             />
           </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="seats">Number of Seats *</label>
-          <input
-            type="number"
-            id="seats"
-            name="seats"
-            value={formData.seats}
-            onChange={handleChange}
-            required
-            min="1"
-            placeholder="Available seats"
-          />
-        </div>
+        {error && (
+          <div style={{padding: '12px 16px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '14px'}}>
+            {error}
+          </div>
+        )}
+        {success && (
+          <div style={{padding: '12px 16px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', color: '#16a34a', fontSize: '14px'}}>
+            Event created successfully!
+          </div>
+        )}
 
-        {error && <div className="error-message">{error}</div>}
-        {success && <div className="success-message">Event created successfully!</div>}
-
-        <div className="form-actions">
-          <button type="submit" disabled={loading} className="btn btn-primary">
+        <div style={{display: 'flex', gap: '12px'}}>
+          <button 
+            type="submit" 
+            disabled={loading} 
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              opacity: loading ? 0.5 : 1
+            }}
+          >
             {loading ? 'Creating...' : 'Create Event'}
           </button>
           {onCancel && (
-            <button type="button" onClick={onCancel} className="btn btn-secondary">
+            <button 
+              type="button" 
+              onClick={onCancel} 
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#e5e7eb',
+                color: '#374151',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}
+            >
               Cancel
             </button>
           )}

@@ -40,14 +40,17 @@ const ParticipantList = ({ eventId }) => {
   };
 
   if (loading) {
-    return <div className="loading-small">Loading participants...</div>;
+    return <div style={{padding: '16px', textAlign: 'center', color: '#6b7280', fontSize: '14px'}}>Loading participants...</div>;
   }
 
   if (error) {
     return (
-      <div className="error-container-small">
-        <p className="error-message">{error}</p>
-        <button onClick={fetchParticipants} className="btn btn-small">
+      <div style={{padding: '12px', backgroundColor: '#fef2f2', borderRadius: '8px', textAlign: 'center'}}>
+        <p style={{color: '#b91c1c', fontSize: '14px', marginBottom: '8px'}}>{error}</p>
+        <button 
+          onClick={fetchParticipants} 
+          style={{padding: '6px 12px', backgroundColor: '#2563eb', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px'}}
+        >
           Try Again
         </button>
       </div>
@@ -56,33 +59,56 @@ const ParticipantList = ({ eventId }) => {
 
   if (participants.length === 0) {
     return (
-      <div className="empty-state-small">
-        <p>No participants registered for this event.</p>
+      <div style={{padding: '20px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center'}}>
+        <p style={{color: '#6b7280', fontSize: '14px'}}>No participants registered for this event.</p>
       </div>
     );
   }
 
   return (
-    <div className="participant-list">
-      <div className="participant-list-header">
-        <h4>Participants ({participants.length})</h4>
-        <button onClick={fetchParticipants} className="btn btn-link btn-small">
-          Refresh
+    <div>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+        <h4 style={{fontSize: '1rem', fontWeight: '600', color: '#1f2937', margin: 0}}>Participants ({participants.length})</h4>
+        <button 
+          onClick={fetchParticipants} 
+          style={{background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '14px', fontWeight: '500'}}
+        >
+          🔄 Refresh
         </button>
       </div>
-      <ul className="participant-items">
+      <ul style={{listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px'}}>
         {participants.map(participant => (
-          <li key={participant.id} className="participant-item">
-            <div className="participant-info">
-              <strong>{participant.name}</strong>
-              <span className="participant-email">{participant.email}</span>
+          <li 
+            key={participant.id} 
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px',
+              backgroundColor: '#f9fafb',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb'
+            }}
+          >
+            <div style={{display: 'flex', flexDirection: 'column', gap: '2px'}}>
+              <strong style={{color: '#111827', fontSize: '14px'}}>{participant.name}</strong>
+              <span style={{color: '#6b7280', fontSize: '13px'}}>{participant.email}</span>
               {participant.phone && (
-                <span className="participant-phone">{participant.phone}</span>
+                <span style={{color: '#9ca3af', fontSize: '12px'}}>{participant.phone}</span>
               )}
             </div>
             <button
               onClick={() => handleRemove(participant.id)}
-              className="btn btn-small btn-danger"
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#fee2e2',
+                color: '#dc2626',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '500'
+              }}
             >
               Remove
             </button>
