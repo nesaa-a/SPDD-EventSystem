@@ -1,0 +1,188 @@
+# HashiCorp Vault Configuration for Secrets Management
+# Provides secure secrets storage with dynamic credential rotation
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+  namespace: spdd-events
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: spdd-events
+data:
+  vault-config.hcl: |
+    ui = true
+    
+    listener "tcp" {
+      address = "0.0.0.0:8200"
+      tls_disable = 1  # Enable TLS in production
+    }
+    
+    storage "consul" {
+      address = "consul:8500"
+      path    = "vault/"
+    }
+    
+    # API address for Vault to advertise
+    api_addr = "http://vault:8200"
+    cluster_addr = "https://vault:8201"
+    
+    # Seal configuration (use auto-unseal in production)
+    seal "transit" {
+      address = "https://vault-transit:8200"
+      disable_renewal = "false"
+      key_name = "autounseal"
+      mount_path = "transit/"
+    }
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: spdd-events
+  labels:
+    app: vault
+spec:
+  serviceName: vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      serviceAccountName: vault
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.15
+          ports:
+            - containerPort: 8200
+              name: http
+            - containerPort: 8201
+              name: cluster
+          env:
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+            - name: VAULT_API_ADDR
+              value: "http://vault:8200"
+            - name: SKIP_CHOWN
+              value: "true"
+          volumeMounts:
+            - name: vault-config
+              mountPath: /vault/config
+            - name: vault-data
+              mountPath: /vault/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          securityContext:
+            capabilities:
+              add: ["IPC_LOCK"]
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true
+              port: 8200
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true
+              port: 8200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: vault-config
+          configMap:
+            name: vault-config
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: spdd-events
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8200
+      targetPort: 8200
+      name: http
+    - port: 8201
+      targetPort: 8201
+      name: cluster
+  selector:
+    app: vault
+
+---
+# Vault Agent Injector for automatic secret injection
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-agent-config
+  namespace: spdd-events
+data:
+  vault-agent-config.hcl: |
+    exit_after_auth = false
+    pid_file = "/home/vault/pidfile"
+    
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role = "spdd-app"
+        }
+      }
+      
+      sink "file" {
+        config = {
+          path = "/home/vault/.vault-token"
+        }
+      }
+    }
+    
+    template {
+      destination = "/vault/secrets/database.txt"
+      contents = <<EOT
+    {{- with secret "database/creds/spdd-app" }}
+    POSTGRES_USER={{ .Data.username }}
+    POSTGRES_PASSWORD={{ .Data.password }}
+    {{- end }}
+    EOT
+    }
+    
+    template {
+      destination = "/vault/secrets/redis.txt"
+      contents = <<EOT
+    {{- with secret "secret/data/spdd/redis" }}
+    REDIS_PASSWORD={{ .Data.data.password }}
+    {{- end }}
+    EOT
+    }
+    
+    template {
+      destination = "/vault/secrets/jwt.txt"
+      contents = <<EOT
+    {{- with secret "secret/data/spdd/jwt" }}
+    JWT_SECRET_KEY={{ .Data.data.secret_key }}
+    {{- end }}
+    EOT
+    }

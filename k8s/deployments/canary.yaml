@@ -1,0 +1,181 @@
+# Kubernetes Canary Deployment with Istio
+# Gradual traffic shifting for safe rollouts
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: event-service-canary
+  namespace: spdd-events
+spec:
+  hosts:
+    - event-service
+  http:
+    - match:
+        - headers:
+            x-canary:
+              exact: "true"
+      route:
+        - destination:
+            host: event-service
+            subset: canary
+          weight: 100
+    - route:
+        # Stable version gets most traffic
+        - destination:
+            host: event-service
+            subset: stable
+          weight: 90
+        # Canary version gets small percentage for testing
+        - destination:
+            host: event-service
+            subset: canary
+          weight: 10
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: event-service-destinationrule
+  namespace: spdd-events
+spec:
+  host: event-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+# Stable Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-service-stable
+  namespace: spdd-events
+  labels:
+    app: event-service
+    version: stable
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: event-service
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: event-service
+        version: stable
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: event-service
+          image: spdd/event-service:v1.0.0
+          ports:
+            - containerPort: 8000
+          env:
+            - name: VERSION
+              value: "stable"
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+# Canary Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-service-canary
+  namespace: spdd-events
+  labels:
+    app: event-service
+    version: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-service
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: event-service
+        version: canary
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: event-service
+          image: spdd/event-service:v1.1.0-rc1
+          ports:
+            - containerPort: 8000
+          env:
+            - name: VERSION
+              value: "canary"
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+# Horizontal Pod Autoscaler for Canary
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: event-service-canary-hpa
+  namespace: spdd-events
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: event-service-canary
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

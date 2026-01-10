@@ -107,6 +107,43 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- Redis Cache ---
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Elasticsearch for Full-text Search ---
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   # --- Application Services ---
   event-service:
     build:
@@ -116,14 +153,21 @@ services:
     depends_on:
       - postgres
       - kafka
+      - redis
+      - elasticsearch
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://user:pass@postgres:5432/eventsdb
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_BROKER=kafka:9092
-      - JAEGER_AGENT_HOST=jaeger
-      - JAEGER_AGENT_PORT=6831
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - JAEGER_HOST=jaeger
+      - JAEGER_PORT=6831
+      - TRACING_ENABLED=true
+      - SERVICE_NAME=event-service
     networks:
       - app_net
       - monitoring
@@ -215,3 +259,5 @@ volumes:
   postgres_data:
   mongo_data:
   grafana-storage:
+  redis_data:
+  es_data:

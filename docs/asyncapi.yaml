@@ -1,0 +1,326 @@
+asyncapi: "2.6.0"
+info:
+  title: SPDD Event System - Async API
+  version: "1.0.0"
+  description: |
+    Asynchronous messaging API for the SPDD Event Management System.
+    This document describes the Kafka-based event-driven architecture.
+  contact:
+    name: SPDD Development Team
+    email: dev@spdd-events.local
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  development:
+    url: localhost:9092
+    protocol: kafka
+    description: Local Kafka broker
+  production:
+    url: kafka.spdd-events.local:9092
+    protocol: kafka
+    description: Production Kafka cluster
+
+defaultContentType: application/json
+
+channels:
+  events.created:
+    description: Channel for newly created events
+    publish:
+      operationId: publishEventCreated
+      summary: Publish when a new event is created
+      message:
+        $ref: "#/components/messages/EventCreated"
+    subscribe:
+      operationId: onEventCreated
+      summary: Consume event creation messages
+      message:
+        $ref: "#/components/messages/EventCreated"
+
+  events.updated:
+    description: Channel for updated events
+    publish:
+      operationId: publishEventUpdated
+      message:
+        $ref: "#/components/messages/EventUpdated"
+    subscribe:
+      operationId: onEventUpdated
+      message:
+        $ref: "#/components/messages/EventUpdated"
+
+  events.deleted:
+    description: Channel for deleted events
+    publish:
+      operationId: publishEventDeleted
+      message:
+        $ref: "#/components/messages/EventDeleted"
+    subscribe:
+      operationId: onEventDeleted
+      message:
+        $ref: "#/components/messages/EventDeleted"
+
+  participants.registered:
+    description: Channel for participant registrations
+    publish:
+      operationId: publishParticipantRegistered
+      message:
+        $ref: "#/components/messages/ParticipantRegistered"
+    subscribe:
+      operationId: onParticipantRegistered
+      message:
+        $ref: "#/components/messages/ParticipantRegistered"
+
+  participants.checked-in:
+    description: Channel for participant check-ins
+    publish:
+      operationId: publishParticipantCheckedIn
+      message:
+        $ref: "#/components/messages/ParticipantCheckedIn"
+    subscribe:
+      operationId: onParticipantCheckedIn
+      message:
+        $ref: "#/components/messages/ParticipantCheckedIn"
+
+  events.dlq:
+    description: Dead Letter Queue for failed event messages
+    subscribe:
+      operationId: onDeadLetterMessage
+      summary: Process failed messages for investigation
+      message:
+        $ref: "#/components/messages/DeadLetterMessage"
+
+  analytics.computed:
+    description: Channel for computed analytics results
+    publish:
+      operationId: publishAnalyticsComputed
+      message:
+        $ref: "#/components/messages/AnalyticsComputed"
+    subscribe:
+      operationId: onAnalyticsComputed
+      message:
+        $ref: "#/components/messages/AnalyticsComputed"
+
+components:
+  messages:
+    EventCreated:
+      name: EventCreated
+      title: Event Created Message
+      summary: Message sent when a new event is created
+      contentType: application/json
+      traits:
+        - $ref: "#/components/messageTraits/commonHeaders"
+      payload:
+        $ref: "#/components/schemas/EventPayload"
+
+    EventUpdated:
+      name: EventUpdated
+      title: Event Updated Message
+      summary: Message sent when an event is updated
+      contentType: application/json
+      traits:
+        - $ref: "#/components/messageTraits/commonHeaders"
+      payload:
+        type: object
+        properties:
+          event_id:
+            type: integer
+          changes:
+            type: object
+            additionalProperties: true
+          updated_at:
+            type: string
+            format: date-time
+          updated_by:
+            type: string
+
+    EventDeleted:
+      name: EventDeleted
+      title: Event Deleted Message
+      summary: Message sent when an event is deleted
+      contentType: application/json
+      traits:
+        - $ref: "#/components/messageTraits/commonHeaders"
+      payload:
+        type: object
+        properties:
+          event_id:
+            type: integer
+          deleted_at:
+            type: string
+            format: date-time
+          deleted_by:
+            type: string
+
+    ParticipantRegistered:
+      name: ParticipantRegistered
+      title: Participant Registered Message
+      summary: Message sent when a participant registers for an event
+      contentType: application/json
+      traits:
+        - $ref: "#/components/messageTraits/commonHeaders"
+      payload:
+        $ref: "#/components/schemas/ParticipantPayload"
+
+    ParticipantCheckedIn:
+      name: ParticipantCheckedIn
+      title: Participant Checked In Message
+      summary: Message sent when a participant checks in
+      contentType: application/json
+      traits:
+        - $ref: "#/components/messageTraits/commonHeaders"
+      payload:
+        type: object
+        properties:
+          participant_id:
+            type: integer
+          event_id:
+            type: integer
+          check_in_time:
+            type: string
+            format: date-time
+          method:
+            type: string
+            enum: [qr_code, manual]
+
+    DeadLetterMessage:
+      name: DeadLetterMessage
+      title: Dead Letter Queue Message
+      summary: Failed message that couldn't be processed
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          original_topic:
+            type: string
+          original_message:
+            type: object
+          error:
+            type: string
+          retry_count:
+            type: integer
+          failed_at:
+            type: string
+            format: date-time
+          trace_id:
+            type: string
+
+    AnalyticsComputed:
+      name: AnalyticsComputed
+      title: Analytics Computed Message
+      summary: Message sent when analytics are computed
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          computation_type:
+            type: string
+            enum: [daily_summary, real_time, anomaly_detected]
+          timestamp:
+            type: string
+            format: date-time
+          metrics:
+            type: object
+            additionalProperties: true
+          period:
+            type: object
+            properties:
+              start:
+                type: string
+                format: date-time
+              end:
+                type: string
+                format: date-time
+
+  schemas:
+    EventPayload:
+      type: object
+      required:
+        - event_id
+        - title
+        - date
+        - timestamp
+      properties:
+        event_id:
+          type: integer
+          description: Unique event identifier
+        title:
+          type: string
+          description: Event title
+        description:
+          type: string
+          description: Event description
+        location:
+          type: string
+          description: Event location
+        date:
+          type: string
+          format: date-time
+          description: Event date and time
+        seats:
+          type: integer
+          description: Total available seats
+        category:
+          type: string
+          description: Event category
+        organizer:
+          type: string
+          description: Event organizer name
+        timestamp:
+          type: string
+          format: date-time
+          description: Message creation timestamp
+        created_by:
+          type: string
+          description: Username of creator
+
+    ParticipantPayload:
+      type: object
+      required:
+        - participant_id
+        - event_id
+        - email
+        - timestamp
+      properties:
+        participant_id:
+          type: integer
+        event_id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        registration_source:
+          type: string
+          enum: [web, mobile, api]
+
+  messageTraits:
+    commonHeaders:
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+            description: Unique message correlation ID for tracing
+          trace_id:
+            type: string
+            description: Distributed tracing ID
+          span_id:
+            type: string
+            description: Span ID for tracing
+          timestamp:
+            type: string
+            format: date-time
+            description: Message timestamp
+          source_service:
+            type: string
+            description: Service that produced the message
+          version:
+            type: string
+            description: Message schema version

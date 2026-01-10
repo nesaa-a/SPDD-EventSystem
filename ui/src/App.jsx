@@ -5,7 +5,48 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import AdminDashboard from './components/AdminDashboard';
 import AdminEventDetail from './components/AdminEventDetail';
+import MyEvents from './components/MyEvents';
+import SystemDashboard from './components/SystemDashboard';
 import './index.css';
+
+// Layout wrapper with navigation
+function Layout({ user, onLogout, children }) {
+  return (
+    <div style={{minHeight: '100vh', backgroundColor: '#f3f4f6'}}>
+      <nav style={{backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', position: 'sticky', top: 0, zIndex: 100}}>
+        <div style={{maxWidth: '1280px', margin: '0 auto', padding: '12px 24px'}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '32px'}}>
+              <a href="/dashboard" style={{fontSize: '1.25rem', fontWeight: 'bold', color: '#2563eb', textDecoration: 'none'}}>🎉 EventHub</a>
+              <div style={{display: 'flex', gap: '24px'}}>
+                <a href="/dashboard" style={{color: '#4b5563', textDecoration: 'none', fontWeight: '500'}}>Events</a>
+                <a href="/my-events" style={{color: '#4b5563', textDecoration: 'none', fontWeight: '500'}}>My Events</a>
+                {user?.role === 'admin' && (
+                  <>
+                    <a href="/admin" style={{color: '#4b5563', textDecoration: 'none', fontWeight: '500'}}>Admin</a>
+                    <a href="/system" style={{color: '#4b5563', textDecoration: 'none', fontWeight: '500'}}>System</a>
+                  </>
+                )}
+              </div>
+            </div>
+            <div style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
+              <span style={{fontSize: '14px', color: '#6b7280'}}>👤 {user?.username} ({user?.role})</span>
+              <button
+                onClick={onLogout}
+                style={{padding: '8px 16px', fontSize: '14px', backgroundColor: '#ef4444', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer'}}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <main style={{maxWidth: '1280px', margin: '0 auto', padding: '24px'}}>
+        {children}
+      </main>
+    </div>
+  );
+}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -13,26 +54,10 @@ function App() {
 
   useEffect(() => {
     // Check if user is logged in
-    const currentUser = localStorage.getItem('currentUser');
-    if (currentUser) {
-      setUser(JSON.parse(currentUser));
-    }
-    
-    // Initialize default admin user if it doesn't exist
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const adminExists = users.find(u => u.email === 'admin@example.com');
-    
-    if (!adminExists) {
-      const defaultAdmin = {
-        id: 1,
-        name: 'Admin',
-        email: 'admin@example.com',
-        password: 'admin123',
-        role: 'admin'
-      };
-      users.push(defaultAdmin);
-      localStorage.setItem('users', JSON.stringify(users));
-      console.log('Admin user created:', defaultAdmin);
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    if (token && userData) {
+      setUser(JSON.parse(userData));
     }
     
     setLoading(false);
@@ -43,6 +68,8 @@ function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setUser(null);
   };
 
@@ -68,27 +95,51 @@ function App() {
         <Route 
           path="/dashboard" 
           element={
-            user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" replace />
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <Dashboard user={user} onLogout={handleLogout} />
+              </Layout>
+            ) : <Navigate to="/login" replace />
+          } 
+        />
+        <Route 
+          path="/my-events" 
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <MyEvents />
+              </Layout>
+            ) : <Navigate to="/login" replace />
+          } 
+        />
+        <Route 
+          path="/system" 
+          element={
+            user && user.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SystemDashboard />
+              </Layout>
+            ) : <Navigate to="/dashboard" replace />
           } 
         />
         <Route 
           path="/admin" 
           element={
             user && user.role === 'admin' ? (
-              <AdminDashboard user={user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )
+              <Layout user={user} onLogout={handleLogout}>
+                <AdminDashboard user={user} onLogout={handleLogout} />
+              </Layout>
+            ) : <Navigate to="/dashboard" replace />
           } 
         />
         <Route 
           path="/admin/event/:eventId" 
           element={
             user && user.role === 'admin' ? (
-              <AdminEventDetail user={user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )
+              <Layout user={user} onLogout={handleLogout}>
+                <AdminEventDetail user={user} onLogout={handleLogout} />
+              </Layout>
+            ) : <Navigate to="/dashboard" replace />
           } 
         />
         <Route 

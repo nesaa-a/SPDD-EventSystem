@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { eventsAPI, participantsAPI } from '../services/api';
+import { eventsAPI, participantsAPI, reportingAPI } from '../services/api';
+import EventForm from './EventForm';
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [events, setEvents] = useState([]);
@@ -12,6 +13,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showEventForm, setShowEventForm] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,19 +23,29 @@ const AdminDashboard = ({ user, onLogout }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const eventsData = await eventsAPI.getAll();
+      const [eventsData, reportData] = await Promise.all([
+        eventsAPI.getAll(),
+        reportingAPI.getStats()
+      ]);
       setEvents(eventsData);
 
-      // Calculate statistics
-      let totalParticipants = 0;
+      // Use reporting data
+      setStats(prev => ({
+        ...prev,
+        totalEvents: reportData.total_events,
+        totalParticipants: reportData.total_participants,
+        eventsWithParticipants: reportData.events_with_participants
+      }));
+
+      // Calculate additional statistics
       let upcomingEvents = 0;
       let fullEvents = 0;
+      let totalParticipantsCount = reportData.total_participants || 0;
       const now = new Date();
 
       for (const event of eventsData) {
         try {
           const participants = await participantsAPI.getByEventId(event.id);
-          totalParticipants += participants.length;
           
           const eventDate = new Date(event.date);
           if (eventDate > now) {
@@ -50,7 +62,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
       setStats({
         totalEvents: eventsData.length,
-        totalParticipants,
+        totalParticipants: totalParticipantsCount,
         upcomingEvents,
         fullEvents
       });
@@ -84,123 +96,136 @@ const AdminDashboard = ({ user, onLogout }) => {
 
   if (loading) {
     return (
-      <div className="app">
-        <div className="loading">Loading admin dashboard...</div>
+      <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px'}}>
+        <div>Loading admin dashboard...</div>
       </div>
     );
   }
 
+  const cardStyle = {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    padding: '24px',
+    border: '1px solid #e5e7eb',
+    marginBottom: '24px'
+  };
+
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="header-content">
+    <div>
+      {/* Statistics Cards */}
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px'}}>
+        <div style={{background: 'linear-gradient(135deg, #3b82f6, #2563eb)', borderRadius: '12px', padding: '20px', color: 'white', display: 'flex', alignItems: 'center', gap: '16px'}}>
+          <span style={{fontSize: '2rem'}}>📅</span>
           <div>
-            <h1>👑 Admin Dashboard</h1>
-            <p>Welcome, {user?.name || 'Admin'}! Manage all events and participants</p>
-          </div>
-          <div className="header-actions">
-            <button onClick={() => navigate('/dashboard')} className="btn btn-secondary">
-              User View
-            </button>
-            <button onClick={handleLogout} className="btn btn-secondary">
-              Logout
-            </button>
+            <div style={{fontSize: '1.75rem', fontWeight: 'bold'}}>{stats.totalEvents}</div>
+            <div style={{opacity: 0.9, fontSize: '14px'}}>Total Events</div>
           </div>
         </div>
-      </header>
-
-      <main className="app-main">
-        {/* Statistics Cards */}
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon">📅</div>
-            <div className="stat-content">
-              <h3>{stats.totalEvents}</h3>
-              <p>Total Events</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon">👥</div>
-            <div className="stat-content">
-              <h3>{stats.totalParticipants}</h3>
-              <p>Total Participants</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon">⏰</div>
-            <div className="stat-content">
-              <h3>{stats.upcomingEvents}</h3>
-              <p>Upcoming Events</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon">🔒</div>
-            <div className="stat-content">
-              <h3>{stats.fullEvents}</h3>
-              <p>Full Events</p>
-            </div>
+        <div style={{background: 'linear-gradient(135deg, #22c55e, #16a34a)', borderRadius: '12px', padding: '20px', color: 'white', display: 'flex', alignItems: 'center', gap: '16px'}}>
+          <span style={{fontSize: '2rem'}}>👥</span>
+          <div>
+            <div style={{fontSize: '1.75rem', fontWeight: 'bold'}}>{stats.totalParticipants}</div>
+            <div style={{opacity: 0.9, fontSize: '14px'}}>Total Participants</div>
           </div>
         </div>
+        <div style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)', borderRadius: '12px', padding: '20px', color: 'white', display: 'flex', alignItems: 'center', gap: '16px'}}>
+          <span style={{fontSize: '2rem'}}>⏰</span>
+          <div>
+            <div style={{fontSize: '1.75rem', fontWeight: 'bold'}}>{stats.upcomingEvents}</div>
+            <div style={{opacity: 0.9, fontSize: '14px'}}>Upcoming Events</div>
+          </div>
+        </div>
+        <div style={{background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '12px', padding: '20px', color: 'white', display: 'flex', alignItems: 'center', gap: '16px'}}>
+          <span style={{fontSize: '2rem'}}>🔒</span>
+          <div>
+            <div style={{fontSize: '1.75rem', fontWeight: 'bold'}}>{stats.fullEvents}</div>
+            <div style={{opacity: 0.9, fontSize: '14px'}}>Full Events</div>
+          </div>
+        </div>
+      </div>
 
-        {error && (
-          <div className="error-container">
-            <p className="error-message">{error}</p>
-            <button onClick={fetchData} className="btn btn-primary">
-              Retry
-            </button>
+      {error && (
+        <div style={{backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '16px', marginBottom: '24px'}}>
+          <p style={{color: '#b91c1c', marginBottom: '12px'}}>{error}</p>
+          <button onClick={fetchData} style={{padding: '8px 16px', backgroundColor: '#2563eb', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer'}}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Create Event Section */}
+      <div style={cardStyle}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showEventForm ? '20px' : '0'}}>
+          <h2 style={{fontSize: '1.25rem', fontWeight: '600', color: '#1f2937'}}>Create New Event</h2>
+          <button 
+            onClick={() => setShowEventForm(!showEventForm)} 
+            style={{padding: '10px 20px', backgroundColor: showEventForm ? '#6b7280' : '#2563eb', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '500'}}
+          >
+            {showEventForm ? '✕ Cancel' : '+ New Event'}
+          </button>
+        </div>
+        {showEventForm && (
+          <EventForm 
+            onEventCreated={() => {
+              setShowEventForm(false);
+              fetchData();
+            }}
+            onCancel={() => setShowEventForm(false)}
+          />
+        )}
+      </div>
+
+      {/* Events Management */}
+      <div style={cardStyle}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+          <h2 style={{fontSize: '1.25rem', fontWeight: '600', color: '#1f2937'}}>All Events ({events.length})</h2>
+          <button onClick={fetchData} style={{padding: '8px 16px', backgroundColor: '#e5e7eb', color: '#374151', borderRadius: '6px', border: 'none', cursor: 'pointer'}}>
+            🔄 Refresh
+          </button>
+        </div>
+
+        {events.length === 0 ? (
+          <div style={{backgroundColor: '#f9fafb', borderRadius: '8px', padding: '32px', textAlign: 'center', color: '#6b7280'}}>
+            No events found. Create your first event above!
+          </div>
+        ) : (
+          <div style={{display: 'grid', gap: '16px'}}>
+            {events.map(event => (
+              <div key={event.id} style={{backgroundColor: '#f9fafb', borderRadius: '10px', padding: '20px', border: '1px solid #e5e7eb'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '12px'}}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                    <h3 style={{fontSize: '1.125rem', fontWeight: '600', color: '#111827'}}>{event.title}</h3>
+                    {event.category && (
+                      <span style={{padding: '4px 10px', fontSize: '12px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '9999px'}}>
+                        {event.category}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteEvent(event.id)}
+                    style={{padding: '6px 12px', backgroundColor: '#fee2e2', color: '#dc2626', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px'}}
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', fontSize: '14px', color: '#4b5563', marginBottom: '16px'}}>
+                  <p>📍 {event.location}</p>
+                  <p>📅 {new Date(event.date).toLocaleDateString()}</p>
+                  <p>🪑 {event.seats} seats</p>
+                </div>
+                {event.description && <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '16px'}}>{event.description}</p>}
+                <button
+                  onClick={() => navigate(`/admin/event/${event.id}`)}
+                  style={{padding: '10px 20px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '500'}}
+                >
+                  👥 View Participants
+                </button>
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Events Management */}
-        <div className="admin-section">
-          <div className="section-header">
-            <h2>All Events Management</h2>
-            <button onClick={fetchData} className="btn btn-secondary">
-              Refresh
-            </button>
-          </div>
-
-          {events.length === 0 ? (
-            <div className="empty-state">
-              <p>No events found. Create events from the user dashboard.</p>
-            </div>
-          ) : (
-            <div className="admin-events-list">
-              {events.map(event => (
-                <div key={event.id} className="admin-event-card">
-                  <div className="admin-event-header">
-                    <h3>{event.title}</h3>
-                    <button
-                      onClick={() => handleDeleteEvent(event.id)}
-                      className="btn btn-small btn-danger"
-                    >
-                      Delete Event
-                    </button>
-                  </div>
-                  <div className="admin-event-details">
-                    <p><strong>Location:</strong> {event.location}</p>
-                    <p><strong>Date:</strong> {new Date(event.date).toLocaleString()}</p>
-                    <p><strong>Seats:</strong> {event.seats}</p>
-                    {event.description && <p><strong>Description:</strong> {event.description}</p>}
-                  </div>
-                  <div className="admin-event-actions">
-                    <button
-                      onClick={() => navigate(`/admin/event/${event.id}`)}
-                      className="btn btn-small btn-primary"
-                    >
-                      View Participants
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-
-      <footer className="app-footer">
-        <p>© 2024 Event Management System - Admin Panel</p>
-      </footer>
+      </div>
     </div>
   );
 };
